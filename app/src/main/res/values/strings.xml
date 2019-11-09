@@ -3,4 +3,7 @@
     <string name="button_default_camera">Default Camera</string>
     <string name="button_custom_camera">Custom Camera</string>
     <string name="image_from_camera">Some captured image from camera</string>
+    <string name="button_pick_image">Pick image</string>
+    <string name="camera">Camera</string>
+    <string name="capture">Capture</string>
 </resources>
