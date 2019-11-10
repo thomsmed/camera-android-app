@@ -1,6 +1,5 @@
 package com.thomsmed.camera
 
-import android.Manifest
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri

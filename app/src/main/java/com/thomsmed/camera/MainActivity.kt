@@ -26,10 +26,12 @@ class MainActivity : AppCompatActivity() {
     lateinit var btnDefaultCamera: Button
     lateinit var btnCustomCamera: Button
 
-    val REQUEST_IMAGE_CAPTURE = 1
+    val REQUEST_PERMISSION_CAMERA_AND_WRITE_EXTERNAL = 0
+    val REQUEST_PERMISSION_CAMERA = 1
     val REQUEST_PERMISSION_WRITE_EXTERNAL = 2
     val REQUEST_PICK_IMAGE = 3
-    val REQUEST_CUSTOM_IMAGE_CAPTURE = 4
+    val REQUEST_IMAGE_CAPTURE = 4
+    val REQUEST_CUSTOM_IMAGE_CAPTURE = 5
 
     lateinit var pickImageHandler: PickImageHandler
     lateinit var defaultCameraHandler: DefaultCameraHandler
@@ -53,18 +55,19 @@ class MainActivity : AppCompatActivity() {
         customCameraHandler = CustomCameraHandler(this)
         btnCustomCamera.setOnClickListener(customCameraHandler)
 
-        // Accessing MediaStore require permissions
         requestPermissions()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-
         when (requestCode) {
+            REQUEST_PICK_IMAGE -> {
+                handlePickImageRequest(resultCode, data)
+            }
             REQUEST_IMAGE_CAPTURE -> {
                 handleImageCaptureRequest(resultCode, data)
             }
-            REQUEST_PICK_IMAGE -> {
-                handlePickImageRequest(resultCode, data)
+            REQUEST_CUSTOM_IMAGE_CAPTURE -> {
+                handleCustomImageCaptureRequest(resultCode, data)
             }
         }
     }
@@ -80,6 +83,32 @@ class MainActivity : AppCompatActivity() {
                     // Set some flags, do som stuff...
                 }
             }
+            REQUEST_PERMISSION_CAMERA -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Set some flags, do som stuff...
+                }
+            }
+            REQUEST_PERMISSION_CAMERA_AND_WRITE_EXTERNAL -> {
+                if (grantResults.isNotEmpty()
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+                    // Set some flags, do som stuff...
+                }
+            }
+        }
+    }
+
+    @TargetApi(23)
+    private fun requestPermissions() {
+        if (Build.VERSION.SDK_INT < 23) {
+            return
+        }
+        if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+            || checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                Manifest.permission.CAMERA),
+                REQUEST_PERMISSION_CAMERA_AND_WRITE_EXTERNAL)
         }
     }
 
@@ -88,10 +117,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        data?.let {
-            val thumbnail: Bitmap? = it.getParcelableExtra("data")
+        data?.let {intent ->
+            val thumbnail: Bitmap? = intent.getParcelableExtra("data")
 
-            data.data?.let { uri ->
+            intent.data?.let { uri ->
                 try {
                     val inputStream = contentResolver.openInputStream(uri)
                     imageView.setImageBitmap(BitmapFactory.decodeStream(inputStream))
@@ -120,10 +149,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @TargetApi(23)
-    private fun requestPermissions() {
-        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), REQUEST_PERMISSION_WRITE_EXTERNAL)
+    private fun handleCustomImageCaptureRequest(resultCode: Int, data: Intent?) {
+        if (resultCode != Activity.RESULT_OK) {
+            return
+        }
+
+        val thumbnail: Bitmap? = data?.getParcelableExtra("data")
+
+        // After getting the image it might also be meaningful to add the image to the media library (Intent with Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+        try {
+            customCameraHandler.imageUri?.let {
+                val inputStream = contentResolver.openInputStream(it)
+                imageView.setImageBitmap(BitmapFactory.decodeStream(inputStream))
+            }
+        } catch (e: Exception) {
+            // Ignore...
         }
     }
 
@@ -169,14 +209,24 @@ class MainActivity : AppCompatActivity() {
 
     inner class CustomCameraHandler(private val activity: Activity) : View.OnClickListener {
 
+        private val contentUriService: ContentUriService = ContentUriService(activity)
+
+        var imageUri: Uri? = null
+            private set
+
         override fun onClick(v: View?) {
-            if (!activity.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
-                return
-            }
+            val timeStamp =  SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(Date())
+            val filePrefix = "image_${timeStamp}"
+            val fileSuffix = ".jpg"
+            val mimeType = "image/jpg"
+
+            imageUri = contentUriService.createExternalMediaStoreContentUri(filePrefix, mimeType)
 
             Intent(activity, CustomCameraActivity::class.java).also { takeCustomPictureIntent ->
+                takeCustomPictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, imageUri)
                 activity.startActivityForResult(takeCustomPictureIntent, REQUEST_CUSTOM_IMAGE_CAPTURE)
             }
         }
+
     }
 }
