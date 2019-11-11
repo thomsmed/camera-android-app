@@ -6,4 +6,6 @@
     <string name="button_pick_image">Pick image</string>
     <string name="camera">Camera</string>
     <string name="capture">Capture</string>
+    <string name="ok">Ok</string>
+    <string name="cancel">Cancel</string>
 </resources>

@@ -26,6 +26,8 @@ class CustomCameraActivity : AppCompatActivity(), TextureView.SurfaceTextureList
 
     private lateinit var textureView: TextureView
     private lateinit var btnCapture: Button
+    private lateinit var btnOk: Button
+    private lateinit var btnCancel: Button
 
     private lateinit var imageReader: ImageReader
 
@@ -73,6 +75,10 @@ class CustomCameraActivity : AppCompatActivity(), TextureView.SurfaceTextureList
 
         override fun onConfigured(session: CameraCaptureSession) {
             activeCaptureSession = session
+            val repeatingCaptureRequest = selectedCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+                addTarget(Surface(textureView.surfaceTexture))
+            }.build()
+            activeCaptureSession!!.setRepeatingRequest(repeatingCaptureRequest, null, null)
         }
     }
     private val captureSessionCaptureCallback = object : CameraCaptureSession.CaptureCallback() {
@@ -140,11 +146,55 @@ class CustomCameraActivity : AppCompatActivity(), TextureView.SurfaceTextureList
                 return
             }
 
+            btnCapture.visibility = View.GONE
+
+            activeCaptureSession!!.stopRepeating()
+
             val captureRequest = selectedCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
                 addTarget(Surface(textureView.surfaceTexture))
                 addTarget(imageReader.surface)
             }.build()
             activeCaptureSession!!.capture(captureRequest, captureSessionCaptureCallback, null)
+        }
+    }
+    private val okBtnCallback = object : View.OnClickListener {
+        override fun onClick(v: View?) {
+            btnOk.visibility = View.GONE
+            btnCancel.visibility = View.GONE
+            imageReader.acquireLatestImage()?.let { image ->
+                // NB! IO should be done i a separate thread
+                if (imageUri == null) {
+                    return@let
+                }
+
+                try {
+                    val buffer = image.planes[0].buffer
+                    val bytes = ByteArray(buffer.remaining())
+                    buffer.get(bytes)
+
+                    contentResolver.openOutputStream(imageUri!!)?.apply {
+                        write(bytes)
+                    }
+
+                    image.close()
+
+                    setResult(Activity.RESULT_OK)
+                } catch (e: Exception) {
+                    // Ignore...
+                }
+            }
+            finish()
+        }
+    }
+    private val cancelBtnCallback = object : View.OnClickListener {
+        override fun onClick(v: View?) {
+            btnCapture.visibility = View.VISIBLE
+            btnOk.visibility = View.GONE
+            btnCancel.visibility = View.GONE
+            val repeatingCaptureRequest = selectedCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+                addTarget(Surface(textureView.surfaceTexture))
+            }.build()
+            activeCaptureSession!!.setRepeatingRequest(repeatingCaptureRequest, null, null)
         }
     }
 
@@ -159,6 +209,10 @@ class CustomCameraActivity : AppCompatActivity(), TextureView.SurfaceTextureList
 
         btnCapture = findViewById(R.id.button_capture)
         btnCapture.setOnClickListener(captureBtnCallback)
+        btnOk = findViewById(R.id.button_capture_ok)
+        btnOk.setOnClickListener(okBtnCallback)
+        btnCancel = findViewById(R.id.button_capture_cancel)
+        btnCancel.setOnClickListener(cancelBtnCallback)
 
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
 
@@ -181,29 +235,8 @@ class CustomCameraActivity : AppCompatActivity(), TextureView.SurfaceTextureList
 
         imageReader = ImageReader.newInstance(largesImageSize.width, largesImageSize.height, ImageFormat.JPEG, 2) // maxImages = 2 is recommended when using acquireLatestImage()
         imageReader.setOnImageAvailableListener({
-            imageReader.acquireLatestImage()?.let { image ->
-                // NB! IO should be done i a separate thread
-                if (imageUri == null) {
-                    return@let
-                }
-
-                try {
-                    val buffer = image.planes[0].buffer
-                    val bytes = ByteArray(buffer.remaining())
-                    buffer.get(bytes)
-
-                    contentResolver.openOutputStream(imageUri!!)?.apply {
-                        write(bytes)
-                    }
-
-                    image.close()
-
-                    setResult(Activity.RESULT_OK)
-                    Toast.makeText(this, "Captured image saved", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    // Ignore...
-                }
-            }
+            btnOk.visibility = View.VISIBLE
+            btnCancel.visibility = View.VISIBLE
         }, null)
     }
 
